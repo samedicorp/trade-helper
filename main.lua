@@ -25,6 +25,8 @@ function Module:onStart()
     self.inventory = {}
     self.index = {}
     self.builds = {}
+    self.recipes = {}
+    self.running = true
     local id = modula.core.getItemId()
 
     self.input = { { id = id, quantity = 1.0 } }
@@ -32,17 +34,35 @@ function Module:onStart()
 end
 
 function Module:onFastUpdate()
-    local input = self.input
-    self.input = {}
-    for i,item in ipairs(input) do
-        self:build(item.id, item.quantity)
-    end
+    if self.running then
+        local input = self.input
+        self.input = {}
+        for i,item in ipairs(input) do
+            self:request(item.id, item.quantity)
+        end
 
-    printf("Build List")
-    for id, count in pairs(self.builds) do
-        local item = self.index[id]
-        local name = item.name
-        printf("- %s x %s", count, name)
+        printf("Build List")
+        for id, count in pairs(self.builds) do
+            local item = self.index[id]
+            local name = item.name
+            printf("- %s x %s", count, name)
+        end
+
+        printf("Recipes")
+        for id, count in pairs(self.recipes) do
+            local item = self.index[id]
+            local name = item.name
+            printf("- %s x %s", count, name)
+        end
+
+        printf("Inventory")
+        for id, count in pairs(self.inventory) do
+            local item = self.index[id]
+            local name = item.name
+            printf("- %s x %s", count, name)
+        end
+
+        self.running = #self.input > 0
     end
 end
 
@@ -52,28 +72,70 @@ end
 -- Internal
 -- ---------------------------------------------------------------------
 
-function Module:build(id, amount)
+function Module:request(id, amount)
     local index = self.index
     local item = index[id] or self:addToIndex(id, index)
     printf("Processing %s", item.name)
-    local builds = self.builds
-    local count = builds[id] or 0.0
     local inputs = self.input
-    count = count + amount
-    builds[id] = count
+    local inventory = self.inventory
+    local got = inventory[id] or 0
+    if got >= amount then
+        inventory[id] = got - amount
+    else
+        inventory[id] = 0
+        amount = amount - got
+        local recipe = self:bestRecipe(id)
+        if recipe then
+            self:build(item, recipe, amount)
+        else
+            printf("No recipe for %s.", item.name)
+            local builds = self.builds
+            local count = builds[id] or 0.0
+        end
+    end
+end
 
-    if item.type ~= "material" then
-        printf(item.type)
-        local recipes = system.getRecipes(id)
-        for i,recipe in ipairs(recipes) do
-            printf(recipe)
-            builds[id] = nil
-            for i, item in pairs(recipe.ingredients) do
-                table.insert(inputs, item)
-            end
+function Module:bestRecipe(id)
+    local recipes = system.getRecipes(id)
+    for i,recipe in ipairs(recipes) do
+        return recipe
+    end
+end
+
+function Module:addToInventory(id, amount)
+    local count = self.inventory[id] or 0
+    self.inventory[id] = count + amount
+end
+
+function Module:build(item, recipe, amount)
+    printf("Need to build %s x %s", amount, item.name)
+    local quantity = 0
+    for i,product in ipairs(recipe.products) do
+        if product.id == item.id then
+            quantity = product.quantity
             break
         end
     end
+
+    local batches = math.floor(amount / quantity)
+    printf("Need %s batches", batches)
+
+    for i,product in ipairs(recipe.products) do
+        self:addToInventory(product.id, product.quantity * batches)
+    end
+
+    -- if item.type ~= "material" then
+    --     printf(item.type)
+    --     local recipes = system.getRecipes(id)
+    --     for i,recipe in ipairs(recipes) do
+    --         printf(recipe)
+    --         builds[id] = nil
+    --         for i, item in pairs(recipe.ingredients) do
+    --             table.insert(inputs, item)
+    --         end
+    --         break
+    --     end
+    -- end
 end
 
 function Module:addToIndex(id, index)
