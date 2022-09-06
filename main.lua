@@ -39,7 +39,12 @@ function Module:onStart()
     local id = ids['polycarb']
 
     self.input = { { id = id, quantity = 50.0 } }
-    -- self:attachToScreen()
+
+    printf("\nRequest")
+    for i,item in ipairs(self.input) do
+        local info = self:itemInfo(item.id)
+        printf("- %s x %s", item.quantity, self:itemDescription(info))
+    end
 end
 
 function Module:onFastUpdate()
