@@ -41,28 +41,37 @@ function Module:onFastUpdate()
             self:request(item.id, item.quantity)
         end
 
-        printf("Build List")
-        for id, count in pairs(self.builds) do
-            local item = self.index[id]
-            local name = item.name
-            printf("- %s x %s", count, name)
-        end
-
-        printf("Recipes")
-        for id, count in pairs(self.recipes) do
-            local item = self.index[id]
-            local name = item.name
-            printf("- %s x %s", count, name)
-        end
-
-        printf("Inventory")
-        for id, count in pairs(self.inventory) do
-            local item = self.index[id]
-            local name = item.name
-            printf("- %s x %s", count, name)
-        end
-
         self.running = #self.input > 0
+        if not self.running then
+            printf("Build List")
+            for id, count in pairs(self.builds) do
+                if count > 0 then
+                    local item = self:itemInfo(id)
+                    local name = item.locDisplayName
+                    printf("- %s x %s", count, name)
+                end
+            end
+    
+            printf("Recipes")
+            for id, entry in pairs(self.recipes) do
+                if entry.count > 0 then
+                    local item = self:itemInfo(id)
+                    local name = item.locDisplayName
+                    printf("- %s x %s", entry.count, name)
+                end
+            end
+    
+            printf("Inventory")
+            for id, count in pairs(self.inventory) do
+                if count > 0 then
+                    local item = self:itemInfo(id)
+                    local name = item.locDisplayName
+                    printf("- %s x %s", count, name)
+                end
+            end
+
+            printf("Done")
+        end
     end
 end
 
@@ -73,16 +82,15 @@ end
 -- ---------------------------------------------------------------------
 
 function Module:request(id, amount)
-    local index = self.index
-    local item = index[id] or self:addToIndex(id, index)
+    local item = self:itemInfo(id)
     printf("Processing %s", item.name)
     local inputs = self.input
     local inventory = self.inventory
-    local got = inventory[id] or 0
+    local got = inventory[id] or 0.0
     if got >= amount then
         inventory[id] = got - amount
     else
-        inventory[id] = 0
+        inventory[id] = 0.0
         amount = amount - got
         local recipe = self:bestRecipe(id)
         if recipe then
@@ -103,13 +111,16 @@ function Module:bestRecipe(id)
 end
 
 function Module:addToInventory(id, amount)
-    local count = self.inventory[id] or 0
-    self.inventory[id] = count + amount
+    local current = self.inventory[id] or 0.0
+    local new = current + amount
+    self.inventory[id] = new
 end
 
 function Module:build(item, recipe, amount)
+    local id = item.id
+
     printf("Need to build %s x %s", amount, item.name)
-    local quantity = 0
+    local quantity = 0.0
     for i,product in ipairs(recipe.products) do
         if product.id == item.id then
             quantity = product.quantity
@@ -120,28 +131,33 @@ function Module:build(item, recipe, amount)
     local batches = math.floor(amount / quantity)
     printf("Need %s batches", batches)
 
+    local entry = self.recipes[id]
+    if not entry then
+        entry = { recipe = recipe, count = 0}
+        self.recipes[id] = entry
+    end
+    entry.count = entry.count + batches
+
     for i,product in ipairs(recipe.products) do
         self:addToInventory(product.id, product.quantity * batches)
     end
 
-    -- if item.type ~= "material" then
-    --     printf(item.type)
-    --     local recipes = system.getRecipes(id)
-    --     for i,recipe in ipairs(recipes) do
-    --         printf(recipe)
-    --         builds[id] = nil
-    --         for i, item in pairs(recipe.ingredients) do
-    --             table.insert(inputs, item)
-    --         end
-    --         break
-    --     end
-    -- end
+    printf("%s %s", item.name, item.type)
+    local input = self.input
+    if item.type ~= "material" then
+        for i, item in pairs(recipe.ingredients) do
+            table.insert(input, { id = item.id, quantity = item.quantity * batches })
+        end
+    end
 end
 
-function Module:addToIndex(id, index)
-    local item = system.getItem(id)
-    index[id] = item
-    return item
+function Module:itemInfo(id)
+    local info = self.index[id]
+    if not info then
+        info = system.getItem(id)
+        self.index[id] = info
+    end
+    return info
 end
 
 function Module:attachToScreen()
