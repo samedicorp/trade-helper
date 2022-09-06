@@ -36,7 +36,7 @@ function Module:onStart()
         basicConnector = 2872711779
     }
 
-    local id = ids['polycarb']
+    local id = ids['basicConnector']
 
     self.input = { { id = id, quantity = 50.0 } }
 
@@ -116,10 +116,16 @@ function Module:itemDescription(item)
 end
 
 function Module:bestRecipe(id)
+    local time
+    local best
     local recipes = system.getRecipes(id)
     for i,recipe in ipairs(recipes) do
-        return recipe
+        if (not time) or time > recipe.time then
+            best = recipe
+            time = recipe.time
+        end
     end
+    return best
 end
 
 function Module:addToInventory(id, amount)
@@ -149,6 +155,9 @@ function Module:build(item, recipe, amount)
     -- how many times do we need to run the recipe?
     local batches = math.ceil(amount / quantityPerBatch)
     debugf("Need to build %s x %s (%s batches)", amount, item.locDisplayName, batches)
+    -- printf(item)
+    -- printf(recipe)
+    -- printf(system.getItem(recipe.id))
 
     -- log that we build this recipe
     self:addToBuildLog(id, recipe, batches, quantityPerBatch)
@@ -162,6 +171,10 @@ function Module:build(item, recipe, amount)
         end
         if amountMade > 0 then
             self:addToInventory(product.id, amountMade)
+            if product.id ~= id then
+                local byproduct = self:itemInfo(product.id)
+                printf("%s byproduct of %s", self:itemDescription(byproduct), self:itemDescription(item))
+            end
         end
     end
 
