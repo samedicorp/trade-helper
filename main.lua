@@ -12,7 +12,7 @@
 local Module = { }
 
 function Module:register(parameters)
-    modula:registerForEvents(self, "onStart")
+    modula:registerForEvents(self, "onStart", "onFastUpdate")
 end
 
 -- ---------------------------------------------------------------------
@@ -26,15 +26,24 @@ function Module:onStart()
     self.index = {}
     self.builds = {}
     local id = modula.core.getItemId()
-    self:build(id)
 
+    self.input = { { id = id, quantity = 1.0 } }
+    -- self:attachToScreen()
+end
+
+function Module:onFastUpdate()
+    local input = self.input
+    self.input = {}
+    for i,item in ipairs(input) do
+        self:build(item.id, item.quantity)
+    end
+
+    printf("Build List")
     for id, count in pairs(self.builds) do
         local item = self.index[id]
         local name = item.name
-        printf("%s: %s", name, count)
-        printf(item)
+        printf("- %s x %s", count, name)
     end
-    -- self:attachToScreen()
 end
 
 
@@ -43,13 +52,28 @@ end
 -- Internal
 -- ---------------------------------------------------------------------
 
-function Module:build(id)
+function Module:build(id, amount)
     local index = self.index
     local item = index[id] or self:addToIndex(id, index)
+    printf("Processing %s", item.name)
     local builds = self.builds
-    local count = builds[id] or 0
-    count = count + 1
+    local count = builds[id] or 0.0
+    local inputs = self.input
+    count = count + amount
     builds[id] = count
+
+    if item.type ~= "material" then
+        printf(item.type)
+        local recipes = system.getRecipes(id)
+        for i,recipe in ipairs(recipes) do
+            printf(recipe)
+            builds[id] = nil
+            for i, item in pairs(recipe.ingredients) do
+                table.insert(inputs, item)
+            end
+            break
+        end
+    end
 end
 
 function Module:addToIndex(id, index)
