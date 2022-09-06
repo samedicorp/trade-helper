@@ -12,7 +12,7 @@
 local Module = { }
 
 function Module:register(parameters)
-    modula:registerForEvents(self, "onStart", "onStop", "onContainerChanged")
+    modula:registerForEvents(self, "onStart")
 end
 
 -- ---------------------------------------------------------------------
@@ -20,30 +20,43 @@ end
 -- ---------------------------------------------------------------------
 
 function Module:onStart()
-    debugf("Container Monitor started.")
+    debugf("Trade Helper started.")
 
-    self:attachToScreen()
-    local containers = modula:getService("containers")
-    if containers then
-        containers:findContainers("ContainerSmallGroup", "ContainerMediumGroup", "ContainerLargeGroup", "ContainerXLGroup")
+    self.inventory = {}
+    self.index = {}
+    self.builds = {}
+    local id = modula.core.getItemId()
+    self:build(id)
+
+    for id, count in pairs(self.builds) do
+        local item = self.index[id]
+        local name = item.name
+        printf("%s: %s", name, count)
+        printf(item)
     end
+    -- self:attachToScreen()
 end
 
-function Module:onStop()
-    debugf("Container Monitor stopped.")
-end
-
-function Module:onContainerChanged(container)
-    self.screen:send({ name = container:name(), value = container.percentage })
-end
-
-function Module:onScreenReply(reply)
-end
 
 
 -- ---------------------------------------------------------------------
 -- Internal
 -- ---------------------------------------------------------------------
+
+function Module:build(id)
+    local index = self.index
+    local item = index[id] or self:addToIndex(id, index)
+    local builds = self.builds
+    local count = builds[id] or 0
+    count = count + 1
+    builds[id] = count
+end
+
+function Module:addToIndex(id, index)
+    local item = system.getItem(id)
+    index[id] = item
+    return item
+end
 
 function Module:attachToScreen()
     -- TODO: send initial container data as part of render script
