@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"name": "modula",
+			"path": "../modula"
+		},
+		{
+			"name": "custom",
+			"path": "../../autoconf/custom"
+		},
+		{
+			"path": "../toolkit"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
+}
