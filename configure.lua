@@ -14,6 +14,7 @@ modulaSettings = {
     modules = {
         ["samedicorp.modula.modules.containers"] = { },
         ["samedicorp.modula.modules.screen"] = { },
+        ["samedicorp.modula.modules.console"] = { name = "main" },
         ["samedicorp.trade-helper.main"] = { }
     }
 }

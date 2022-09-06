@@ -10,6 +10,7 @@
     -- end
 
 local Module = { }
+local CountTable = {}
 
 function Module:register(parameters)
     modula:registerForEvents(self, "onStart", "onFastUpdate")
@@ -24,12 +25,20 @@ function Module:onStart()
 
     self.inventory = {}
     self.index = {}
-    self.builds = {}
     self.recipes = {}
+    self.ores = CountTable.new()
     self.running = true
-    local id = modula.core.getItemId()
 
-    self.input = { { id = id, quantity = 1.0 } }
+    -- example ids
+    local ids = {
+        polycarb = 2014531313,
+        spaceCore = 5904195,
+        basicConnector = 2872711779
+    }
+
+    local id = ids['polycarb']
+
+    self.input = { { id = id, quantity = 50.0 } }
     -- self:attachToScreen()
 end
 
@@ -43,30 +52,28 @@ function Module:onFastUpdate()
 
         self.running = #self.input > 0
         if not self.running then
-            printf("Build List")
-            for id, count in pairs(self.builds) do
-                if count > 0 then
-                    local item = self:itemInfo(id)
-                    local name = item.locDisplayName
-                    printf("- %s x %s", count, name)
-                end
-            end
-    
-            printf("Recipes")
+            printf("\nOperations")
             for id, entry in pairs(self.recipes) do
                 if entry.count > 0 then
                     local item = self:itemInfo(id)
-                    local name = item.locDisplayName
-                    printf("- %s x %s", entry.count, name)
+                    local total = entry.count * entry.quantityPerBatch
+                    printf("- %s x %s --> %s", entry.count, self:itemDescription(item), total)
                 end
             end
     
-            printf("Inventory")
+            printf("\nSurplus")
             for id, count in pairs(self.inventory) do
                 if count > 0 then
                     local item = self:itemInfo(id)
-                    local name = item.locDisplayName
-                    printf("- %s x %s", count, name)
+                    printf("- %s x %s", count, self:itemDescription(item))
+                end
+            end
+
+            printf("\nOres")
+            for id, count in pairs(self.ores) do
+                if count > 0 then
+                    local item = self:itemInfo(id)
+                    printf("- %s x %s", count, self:itemDescription(item))
                 end
             end
 
@@ -75,15 +82,13 @@ function Module:onFastUpdate()
     end
 end
 
-
-
 -- ---------------------------------------------------------------------
 -- Internal
 -- ---------------------------------------------------------------------
 
 function Module:request(id, amount)
     local item = self:itemInfo(id)
-    printf("Processing %s", item.name)
+    debugf("Processing %s", item.name)
     local inputs = self.input
     local inventory = self.inventory
     local got = inventory[id] or 0.0
@@ -96,11 +101,13 @@ function Module:request(id, amount)
         if recipe then
             self:build(item, recipe, amount)
         else
-            printf("No recipe for %s.", item.name)
-            local builds = self.builds
-            local count = builds[id] or 0.0
+            self.ores:add(id, amount)
         end
     end
+end
+
+function Module:itemDescription(item)
+    return string.format("%s (%s)", item.locDisplayName, item.id)
 end
 
 function Module:bestRecipe(id)
@@ -116,39 +123,58 @@ function Module:addToInventory(id, amount)
     self.inventory[id] = new
 end
 
+function Module:addToTable(table, key, amount)
+    local current = table[key] or 0.0
+    local new = current + amount
+    table[key] = new
+end
+
 function Module:build(item, recipe, amount)
     local id = item.id
 
-    printf("Need to build %s x %s", amount, item.name)
-    local quantity = 0.0
+    -- how much of the thing we need does each recipe make?
+    local quantityPerBatch = 0.0
     for i,product in ipairs(recipe.products) do
         if product.id == item.id then
-            quantity = product.quantity
+            quantityPerBatch = product.quantity
             break
         end
     end
 
-    local batches = math.floor(amount / quantity)
-    printf("Need %s batches", batches)
+    -- how many times do we need to run the recipe?
+    local batches = math.ceil(amount / quantityPerBatch)
+    debugf("Need to build %s x %s (%s batches)", amount, item.locDisplayName, batches)
 
+    -- log that we build this recipe
+    self:addToBuildLog(id, recipe, batches, quantityPerBatch)
+
+    -- add the byproducts to our inventory, along
+    -- with any spare of the one we are building
+    for i,product in ipairs(recipe.products) do
+        local amountMade = product.quantity * batches
+        if product.id == id then
+            amountMade = amountMade - amount
+        end
+        if amountMade > 0 then
+            self:addToInventory(product.id, amountMade)
+        end
+    end
+
+    -- add the required ingredients to the input list,
+    -- for further processing
+    local input = self.input
+    for i, item in pairs(recipe.ingredients) do
+        table.insert(input, { id = item.id, quantity = item.quantity * batches })
+    end
+end
+
+function Module:addToBuildLog(id, recipe, batches, quantityPerBatch)
     local entry = self.recipes[id]
     if not entry then
-        entry = { recipe = recipe, count = 0}
+        entry = { recipe = recipe, count = 0, quantityPerBatch = quantityPerBatch }
         self.recipes[id] = entry
     end
     entry.count = entry.count + batches
-
-    for i,product in ipairs(recipe.products) do
-        self:addToInventory(product.id, product.quantity * batches)
-    end
-
-    printf("%s %s", item.name, item.type)
-    local input = self.input
-    if item.type ~= "material" then
-        for i, item in pairs(recipe.ingredients) do
-            table.insert(input, { id = item.id, quantity = item.quantity * batches })
-        end
-    end
 end
 
 function Module:itemInfo(id)
@@ -190,5 +216,27 @@ local chart = layer:addChart(layer.rect:inset(10), containers, "Play")
 layer:render()
 screen:scheduleRefresh()
 ]]
+
+-- ---------------------------------------------------------------------
+-- CountTable
+-- ---------------------------------------------------------------------
+
+function CountTable.new() 
+    local t = {}
+    setmetatable(t, { __index = CountTable })
+    return t
+end
+
+function CountTable:add(key, amount)
+    local current = self[key] or 0.0
+    local new = current + amount
+    self[key] = new
+end
+
+function CountTable:get(key)
+    return self[key] or 0.0
+end
+
+-- ---------------------------------------------------------------------
 
 return Module
